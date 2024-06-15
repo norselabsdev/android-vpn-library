@@ -1,0 +1,144 @@
+name: Build & Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+jobs:
+
+  build-android-full:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version-file: 'go.mod'
+
+      - name: Setup JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: 17
+          distribution: 'temurin'
+
+      - name: Setup Android SDK Tools
+        uses: android-actions/setup-android@v3.2.0
+        with:
+          cmdline-tools-version: 10406996
+
+      - name: Setup Android NDK
+        uses: nttld/setup-ndk@v1.4.2
+        with:
+          ndk-version: 'r26b'
+          link-to-sdk: true
+
+      - name: Setup Go Mobile
+        run: |
+          go install golang.org/x/mobile/cmd/gomobile@latest
+          export PATH=$PATH:~/go/bin
+
+      - name: Initialize Go Mobile
+        run: |
+          gomobile init
+          go get golang.org/x/mobile/bind
+
+      - name: Build
+        run: gomobile bind -v -androidapi 21 -ldflags='-s -w' ./
+
+      - name: Compress .AAR & .JAR files to .zip
+        run: |
+          zip LibV2Ray_Android_Full.zip libv2ray.aar
+          zip LibV2Ray_Android_Full.zip libv2ray-sources.jar
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-full
+          path: ./LibV2Ray_Android_Full.zip
+
+  build-android-striped:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version-file: 'go.mod'
+
+      - name: Setup JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: 17
+          distribution: 'temurin'
+
+      - name: Setup Android SDK Tools
+        uses: android-actions/setup-android@v3.2.0
+        with:
+          cmdline-tools-version: 10406996
+
+      - name: Setup Android NDK
+        uses: nttld/setup-ndk@v1.4.2
+        with:
+          ndk-version: 'r26b'
+          link-to-sdk: true
+
+      - name: Setup Alternative Go Mobile
+        run: |
+          git clone https://github.com/norselabsdev/mobile.git
+          cd mobile/cmd/gomobile
+          go build -o alternative_gomobile
+          chmod a+x ./alternative_gomobile
+          mv ./alternative_gomobile ~/go/bin/
+          export PATH=$PATH:~/go/bin
+
+      - name: Initialize Go Mobile
+        run: alternative_gomobile init
+
+      - name: Replace Go Mobile dependency to Alternative Go Mobile
+        run: |
+          go mod edit -replace=golang.org/x/mobile@latest=github.com/norselabsdev/mobile@latest
+          go mod download
+          go get golang.org/x/mobile/bind
+
+      - name: Build
+        run: alternative_gomobile bind -v -androidapi 21 -ldflags='-s -w' ./
+
+      - name: Compress .AAR & .JAR files to .zip
+        run: |
+          zip LibV2Ray_Android_Stripped.zip libv2ray.aar
+          zip LibV2Ray_Android_Stripped.zip libv2ray-sources.jar
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-striped
+          path: ./LibV2Ray_Android_Stripped.zip
+
+  upload-release:
+    permissions:
+      contents: write
+      packages: write
+
+    runs-on: ubuntu-latest
+    needs: [build-android-full, build-android-striped]
+    steps:
+
+      - name: Download Android (Full) artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: android-full
+
+      - name: Download Android (Striped) artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: android-striped
+
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            LibV2Ray_Android_Full.zip
+            LibV2Ray_Android_Stripped.zip

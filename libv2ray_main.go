@@ -36,6 +36,7 @@ const (
 /*
 V2RayPoint V2Ray Point Server
 This is territory of Go, so no getter and setters!
+This is territory of Go, so no getter and setters!
 */
 type V2RayPoint struct {
 	SupportSet   V2RayVPNServiceSupportsSet
